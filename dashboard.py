@@ -16,7 +16,8 @@ import time
 # streamlit est la bibliothèque principale pour la création de l'application web.
 # components de Streamlit est utilisé pour incorporer des composants HTML personnalisés dans l'application.
 import streamlit.components.v1 as components
-
+import requests
+import json
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import roc_curve, auc
 import os
@@ -272,8 +273,8 @@ def load_lgbm_model():
     return model
 
 # Fonction pour prédire un client
-def predict_client(model, X):
-    model = load_lgbm_model()
+def predict_client(model, nouveau_client):
+    #model = load_lgbm_model()
 
     # Vérifier et ajuster le nombre de caractéristiques si nécessaire
     #if X.shape[1] != model.n_features_:
@@ -283,9 +284,19 @@ def predict_client(model, X):
         # Assurez-vous que le nombre de caractéristiques dans X correspond à celui du modèle après le prétraitement
         # (modifiez X en conséquence)
 
-    y_pred = model.predict(X)
-    y_proba = model.predict_proba(X)
-    return y_pred, y_proba
+    #y_pred = model.predict(X)
+    #y_proba = model.predict_proba(X)
+    url = "https://app-flask-5efe138da57d.herokuapp.com/predictNewClient"
+
+    payload = json.dumps(nouveau_client.to_dict('records')[0])
+    headers = {
+      'Content-Type': 'application/json'
+    }
+
+    response = requests.request("POST", url, headers=headers, data=payload)
+    prediction = response.json()
+    return int(prediction['prediction']), float(prediction['prediction_proba'])
+    #return y_pred, y_proba
 
 # Fonction pour afficher la prédiction d'un client existant
 def show_existing_client_prediction(client_id):
@@ -361,19 +372,21 @@ def show_client_prediction():
                 #if nouveau_client.shape[1] != load_lgbm_model().n_features_:
                     # Effectuer le prétraitement nécessaire pour ajuster le nombre de caractéristiques
                     # ...
+                    
+                    # nouveau_client.to_dict('records')[0]
 
                 y_pred, y_proba = predict_client("lgbm", nouveau_client)
 
-                st.info('Probabilité de solvabilité du client : ' + str(100 * y_proba[0][0]) + ' %')
+                st.info('Probabilité de solvabilité du client : ' + str(100 * y_proba) + ' %')
                 st.info("Notez que 100% => Client non solvable ")
 
-                if y_proba[0][0] < seuil_risque:
+                if y_proba < seuil_risque:
                     st.success('Client prédit comme solvable')
                 else:
                     st.error('Client prédit comme non solvable !')
 
 
-                if y_proba[0][0] < seuil_risque:
+                if y_proba < seuil_risque:
                     st.success('Client prédit comme solvable')
                 else:
                     st.error('Client prédit comme non solvable !')
@@ -446,3 +459,14 @@ if selected_item == 'predire_client':
     seuil_risque_key = "seuil_risque_" + str(id(seuil_risque_container))  # Utilisez l'ID du conteneur comme clé unique
     seuil_risque = seuil_risque_container.slider(seuil_risque_key, min_value=0.0, max_value=1.0, value=0.5, step=0.01)
     show_client_prediction()
+    
+    
+    
+    
+    
+    
+    
+
+
+
+#print(response.text)
