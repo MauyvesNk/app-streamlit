@@ -18,6 +18,7 @@ import time
 import streamlit.components.v1 as components
 import requests
 import json
+import shap
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import roc_curve, auc
 import os
@@ -65,10 +66,15 @@ def filter_graphs():
 
 
 def hist_graph():
-    st.bar_chart(data['DAYS_BIRTH'])
+    # Remplacez la partie où vous utilisez st.pyplot() sans argument par le code suivant :
+    fig, ax = plt.subplots()
+    ax.bar_chart(data['DAYS_BIRTH'])
     df = pd.DataFrame(data[:200], columns=['DAYS_BIRTH', 'AMT_CREDIT'])
-    df.hist()
-    st.pyplot()
+    df.hist(ax=ax)
+    st.pyplot(fig)
+
+# Remplacez l'ancienne ligne qui désactive l'avertissement par la suivante :
+st.set_option('deprecation.showPyplotGlobalUse', False)
 
 
 def education_type():
@@ -274,29 +280,20 @@ def load_lgbm_model():
 
 # Fonction pour prédire un client
 def predict_client(model, nouveau_client):
-    #model = load_lgbm_model()
+    # Chargez le modèle LightGBM ici ou passez-le en tant qu'argument
+    model = load_lgbm_model()
 
-    # Vérifier et ajuster le nombre de caractéristiques si nécessaire
-    #if X.shape[1] != model.n_features_:
-        # Effectuer le prétraitement nécessaire pour ajuster le nombre de caractéristiques
-        # ...
-
-        # Assurez-vous que le nombre de caractéristiques dans X correspond à celui du modèle après le prétraitement
-        # (modifiez X en conséquence)
-
-    #y_pred = model.predict(X)
-    #y_proba = model.predict_proba(X)
     url = "https://app-flask-5efe138da57d.herokuapp.com/predictNewClient"
-
     payload = json.dumps(nouveau_client.to_dict('records')[0])
-    headers = {
-      'Content-Type': 'application/json'
-    }
-
+    headers = {'Content-Type': 'application/json'}
     response = requests.request("POST", url, headers=headers, data=payload)
     prediction = response.json()
-    return int(prediction['prediction']), float(prediction['prediction_proba'])
-    #return y_pred, y_proba
+
+    # Ajoutez le code pour calculer les SHAP values
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(nouveau_client)
+
+    return int(prediction['prediction']), float(prediction['prediction_proba']), shap_values
 
 # Fonction pour afficher la prédiction d'un client existant
 def show_existing_client_prediction(client_id):
@@ -357,39 +354,29 @@ def show_client_prediction():
         if st.button('Voir Client'):
             show_existing_client_prediction(client_id)
 
-    elif selected_choice == 'Nouveau client':
+    if selected_choice == 'Nouveau client':
         filename = st.file_uploader("Sélectionnez le fichier du nouveau client (CSV)", type=["csv"])
         if filename is not None:
             st.write('Fichier du nouveau client sélectionné `%s`' % filename.name)
 
             if st.button('Prédire Client'):
                 nouveau_client = pd.read_csv(filename)
-                
-                #print('########',nouveau_client.shape[1])
-                #print('########',load_lgbm_model().n_features_)
-
-                # Vérifier et ajuster le nombre de caractéristiques si nécessaire
-                #if nouveau_client.shape[1] != load_lgbm_model().n_features_:
-                    # Effectuer le prétraitement nécessaire pour ajuster le nombre de caractéristiques
-                    # ...
-                    
-                    # nouveau_client.to_dict('records')[0]
-
-                y_pred, y_proba = predict_client("lgbm", nouveau_client)
+                y_pred, y_proba, shap_values = predict_client("lgbm", nouveau_client)
 
                 st.info('Probabilité de solvabilité du client : ' + str(100 * y_proba) + ' %')
                 st.info("Notez que 100% => Client non solvable ")
 
+                # Utilisez la variable seuil_risque ici (définissez-la ou passez-la en tant qu'argument)
                 if y_proba < seuil_risque:
                     st.success('Client prédit comme solvable')
                 else:
                     st.error('Client prédit comme non solvable !')
 
+                # Affichez les SHAP values
+                st.subheader('SHAP Values')
+                shap.summary_plot(shap_values, nouveau_client, show=False)
+                st.pyplot()
 
-                if y_proba < seuil_risque:
-                    st.success('Client prédit comme solvable')
-                else:
-                    st.error('Client prédit comme non solvable !')
                     
  # ------------------------------------------------------- Sidebar --------------------------
 
